@@ -1,0 +1,18 @@
+[package]
+name = "shared"
+version = "0.1.0"
+description = "Shared code between USDAF and sUSDAF programs"
+edition = "2021"
+
+[lib]
+crate-type = ["lib"]
+name = "shared"
+
+[features]
+default = []
+test = []
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-spl = { version = "0.31.1", features = ["associated_token"] }
+
