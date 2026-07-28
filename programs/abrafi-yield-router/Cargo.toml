@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (C) 2026 AbraFi Ltd., Business Source License 1.1.
+# Change Date: 2nd anniversary of this version's publication.
+# Change License: Apache-2.0. See LICENSE at repo root.
+
+[package]
+name = "abrafi-yield-router"
+version = "0.1.0"
+description = "Yield router — splits yield tokens between staking programs and external wallets"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "abrafi_yield_router"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+custom-heap = []
+custom-panic = []
+anchor-debug = []
+test = []
+# Token deployment selectors — used in declare_id.rs.public to embed the
+# correct program ID for each deployment in the public repository build.
+usdaf = ["abrafi-staking-rewards/usdaf"]
+solaf = ["abrafi-staking-rewards/solaf"]
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-spl = { version = "0.31.1", features = ["associated_token"] }
+abrafi-staking-rewards = { path = "../abrafi-staking-rewards", features = ["no-entrypoint"] }
+solana-security-txt = "1.1.3"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))', 'cfg(feature, values("test", "usdaf", "solaf"))'] }
+deprecated = "allow"
