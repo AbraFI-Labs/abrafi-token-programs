@@ -21,10 +21,10 @@ Each program supports multiple token deployments selected via a Cargo feature fl
 # Install Anchor CLI (see https://www.anchor-lang.com/docs/installation)
 
 # Build a specific program for a specific token deployment
-cargo build-sbf -p abrafi-backed-token    --features usdaf
-cargo build-sbf -p abrafi-staking-liquid  --features usdaf
-cargo build-sbf -p abrafi-staking-rewards --features solaf
-cargo build-sbf -p abrafi-yield-router    --features usdaf
+cargo build-sbf -- -p abrafi-backed-token    --features usdaf,usdaf-compat
+cargo build-sbf -- -p abrafi-staking-liquid  --features usdaf,susdaf-compat
+cargo build-sbf -- -p abrafi-staking-rewards --features solaf
+cargo build-sbf -- -p abrafi-yield-router    --features usdaf
 ```
 
 ## Verified Builds
@@ -62,4 +62,7 @@ Do not open a public GitHub issue for security vulnerabilities.
 
 ## License
 
-[Add your license here]
+Licensed under the [Business Source License 1.1](./LICENSE). Use is limited to
+non-production purposes unless you obtain a commercial license. Each release
+automatically converts to the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+two years after that release is published.

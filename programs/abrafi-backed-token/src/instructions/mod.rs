@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (C) 2026 AbraFi Ltd., Business Source License 1.1.
+// Change Date: 2nd anniversary of this version's publication.
+// Change License: Apache-2.0. See LICENSE at repo root.
+
 pub mod add_collateral_token;
 pub mod add_mint_whitelist;
 pub mod cancel_unmint;

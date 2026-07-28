@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (C) 2026 AbraFi Ltd., Business Source License 1.1.
+// Change Date: 2nd anniversary of this version's publication.
+// Change License: Apache-2.0. See LICENSE at repo root.
+
 use anchor_lang::prelude::*;
 
 mod constants;
@@ -13,6 +18,16 @@ pub use state::ProgramState;
 use instructions::*;
 
 include!("declare_id.rs");
+
+#[cfg(not(feature = "no-entrypoint"))]
+solana_security_txt::security_txt! {
+    name: "AbraFi Staking Rewards",
+    project_url: "https://www.abrafi.org/",
+    contacts: "email:security@abrafi.io",
+    policy: "https://www.abrafi.org/security-policy",
+    preferred_languages: "en",
+    source_code: "https://github.com/AbraFI-Labs/abrafi-token-programs"
+}
 
 #[program]
 pub mod abrafi_staking_rewards {

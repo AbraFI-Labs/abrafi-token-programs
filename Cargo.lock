@@ -9,6 +9,7 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "shared",
+ "solana-security-txt",
 ]
 
 [[package]]
@@ -18,6 +19,7 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "shared",
+ "solana-security-txt",
 ]
 
 [[package]]
@@ -27,6 +29,7 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "shared",
+ "solana-security-txt",
 ]
 
 [[package]]
@@ -36,6 +39,7 @@ dependencies = [
  "abrafi-staking-rewards",
  "anchor-lang",
  "anchor-spl",
+ "solana-security-txt",
 ]
 
 [[package]]

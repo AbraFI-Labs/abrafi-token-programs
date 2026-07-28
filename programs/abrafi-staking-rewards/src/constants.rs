@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (C) 2026 AbraFi Ltd., Business Source License 1.1.
+// Change Date: 2nd anniversary of this version's publication.
+// Change License: Apache-2.0. See LICENSE at repo root.
+
 pub const STATE_SEED: &[u8] = b"abrafi_staking_rewards_state";
 pub const USER_STAKE_SEED: &[u8] = b"user_stake";
 pub const UNSTAKE_REQUEST_SEED: &[u8] = b"unstake_request";
