@@ -102,22 +102,31 @@ pub fn verify_mint_whitelist<'info>(
 
 /// Resolve the effective unmint cooldown for a user.
 ///
-/// Returns the wallet's custom cooldown if all of the following are true:
-///   - The whitelist is enabled
-///   - The whitelist entry has a custom cooldown configured
-///   - The 24-hour activation delay has passed
+/// Returns the wallet's custom cooldown if a valid whitelist entry exists for the user,
+/// the entry has a custom cooldown configured, and its 24-hour activation delay has passed.
 ///
-/// Falls back to the global cooldown in all other cases, including when the
-/// whitelist is disabled (no whitelist account is required in that case).
+/// Falls back to the global cooldown in all other cases.
 ///
-/// Must be called after `verify_mint_whitelist` so the account is already validated.
+/// The caller (request_unmint accounts struct) enforces the correct PDA address via Anchor's
+/// seeds constraint before this function runs, so no key re-derivation is needed here.
+/// The `is_mint_whitelist_enabled` flag is intentionally NOT a parameter — it only controls
+/// minting access. Custom cooldowns apply regardless of whether the global whitelist is
+/// enabled or disabled, so that market-maker wallets retain their per-wallet cooldown period
+/// even when open minting is permitted.
 pub fn resolve_unmint_cooldown(
+    program_id: &Pubkey,
     mint_whitelist: &AccountInfo,
-    is_whitelist_enabled: bool,
     global_cooldown_seconds: i64,
     now: i64,
 ) -> Result<i64> {
-    if !is_whitelist_enabled {
+    // The account address is already guaranteed to be the correct PDA by the Anchor
+    // seeds constraint on the accounts struct. Check only initialization state.
+    let expected_size = 8 + MintWhitelistEntry::INIT_SPACE;
+    let is_valid_entry = mint_whitelist.lamports() > 0
+        && mint_whitelist.owner == program_id
+        && mint_whitelist.data_len() >= expected_size;
+
+    if !is_valid_entry {
         return Ok(global_cooldown_seconds);
     }
 
