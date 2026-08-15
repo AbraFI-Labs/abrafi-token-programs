@@ -65,8 +65,14 @@ pub struct RequestUnmint<'info> {
     )]
     pub user_unmint_details: Account<'info, UserUnmintDetails>,
 
-    /// Mint whitelist entry account (required if whitelist is enabled)
-    /// CHECK: Validated in handler if whitelist is enabled
+    /// Mint whitelist entry account — address always enforced by seeds constraint;
+    /// whether it is initialized and has a custom cooldown is checked in the handler.
+    /// CHECK: Address is verified by the seeds constraint below. Initialization,
+    /// ownership, and data validity are checked in resolve_unmint_cooldown.
+    #[account(
+        seeds = [MINT_WHITELIST_SEED, user.key().as_ref()],
+        bump,
+    )]
     pub mint_whitelist: UncheckedAccount<'info>,
 
     /// Associated token program for account creation
@@ -97,11 +103,10 @@ pub fn request_unmint_handler(ctx: Context<RequestUnmint>, amount: u64) -> Resul
         state.is_mint_whitelist_enabled,
     )?;
 
-    // Resolve the cooldown for this wallet: custom (if active) or global default.
-    // Must be called after verify_mint_whitelist so the account is already validated.
+    // Resolve the cooldown for this wallet: custom (if entry exists and is active) or global default.
     let effective_cooldown = resolve_unmint_cooldown(
+        ctx.program_id,
         &ctx.accounts.mint_whitelist.to_account_info(),
-        state.is_mint_whitelist_enabled,
         state.unmint_cooldown_seconds,
         clock.unix_timestamp,
     )?;
