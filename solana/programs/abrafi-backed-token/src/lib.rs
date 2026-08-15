@@ -33,8 +33,8 @@ pub mod abrafi_backed_token {
 
     /// Initialize the abrafi token program with multiple collateral token mints and their treasuries
     /// This sets up the program state and creates the abrafi token mint
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        initialize_handler(ctx)
+    pub fn initialize(ctx: Context<Initialize>, token_decimals: u8) -> Result<()> {
+        initialize_handler(ctx, token_decimals)
     }
 
     /// Add a new collateral token and its treasury

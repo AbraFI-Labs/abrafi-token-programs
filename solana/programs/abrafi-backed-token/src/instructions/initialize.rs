@@ -13,6 +13,7 @@ use crate::state::*;
 use crate::utils::*;
 
 #[derive(Accounts)]
+#[instruction(token_decimals: u8)]
 pub struct Initialize<'info> {
     /// Program state account (PDA)
     #[account(
@@ -52,7 +53,7 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = authority,
-        mint::decimals = 6,
+        mint::decimals = token_decimals,
         mint::authority = state,
         mint::freeze_authority = state,
     )]
@@ -66,9 +67,11 @@ pub struct Initialize<'info> {
 }
 
 /// Initialize the abrafi token program
-pub fn initialize_handler(ctx: Context<Initialize>) -> Result<()> {
+pub fn initialize_handler(ctx: Context<Initialize>, _token_decimals: u8) -> Result<()> {
     let state = &mut ctx.accounts.state;
     let abrafi_backed_token_decimals = ctx.accounts.abrafi_backed_token_mint.decimals;
+
+    require!(abrafi_backed_token_decimals <= 18, ErrorCode::InvalidConfiguration);
 
     // Set state fields
     state.version = 1;
