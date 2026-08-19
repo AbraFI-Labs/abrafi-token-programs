@@ -71,7 +71,7 @@ pub fn initialize_handler(ctx: Context<Initialize>, _token_decimals: u8) -> Resu
     let state = &mut ctx.accounts.state;
     let abrafi_backed_token_decimals = ctx.accounts.abrafi_backed_token_mint.decimals;
 
-    require!(abrafi_backed_token_decimals <= 18, ErrorCode::InvalidConfiguration);
+    require!(abrafi_backed_token_decimals <= 9, ErrorCode::InvalidConfiguration);
 
     // Set state fields
     state.version = 1;

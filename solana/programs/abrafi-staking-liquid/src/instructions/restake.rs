@@ -109,6 +109,8 @@ pub fn restake_handler(ctx: Context<Restake>, restake_underlying_amount: u64) ->
         restake_underlying_amount,
         ctx.accounts.vault_token_account.amount,
         ctx.accounts.liquid_staking_token_mint.supply,
+        ctx.accounts.underlying_token_mint.decimals,
+        ctx.accounts.liquid_staking_token_mint.decimals,
     )?;
 
     // Transfer underlying tokens from escrow to vault using UserUnstakeRequest PDA as authority

@@ -46,18 +46,18 @@ pub struct Initialize<'info> {
     )]
     pub operations_authority: SystemAccount<'info>,
 
+    /// The underlying token mint (passed as parameter)
+    pub underlying_token_mint: Account<'info, Mint>,
+
     /// The liquid staking token mint to be created
     #[account(
         init,
         payer = authority,
-        mint::decimals = 6,
+        mint::decimals = underlying_token_mint.decimals,
         mint::authority = state,
         mint::freeze_authority = state,
     )]
     pub liquid_staking_token_mint: Account<'info, Mint>,
-
-    /// The underlying token mint (passed as parameter)
-    pub underlying_token_mint: Account<'info, Mint>,
 
     /// Vault account for storing underlying tokens (will be created if it doesn't exist)
     #[account(

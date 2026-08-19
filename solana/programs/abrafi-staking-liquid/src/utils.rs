@@ -13,6 +13,7 @@ use crate::error::ErrorCode;
 pub use shared::utils::calculations::{
     safe_add_delay,
     calculate_minimum_amount_from_decimals,
+    scale_amount_to_new_decimals,
 };
 
 /// Re-export shared validation functions
@@ -29,19 +30,26 @@ pub fn convert_to_shares(
     underlying_amount: u64,
     vault_underlying_balance: u64,
     liquid_staking_token_supply: u64,
+    underlying_decimals: u8,
+    liquid_staking_decimals: u8,
 ) -> Result<u64> {
     // Validate non-zero input
     require!(underlying_amount > 0, ErrorCode::InvalidAmount);
 
-    // If this is the first staker (total supply is zero), return underlying_amount directly
+    // First staker: scale the underlying amount to the liquid staking token's decimal precision.
+    // Without this, depositing into a fresh vault returns raw base units of the underlying as
+    // liquid staking base units — wrong when the two tokens have different decimal counts.
     if liquid_staking_token_supply == 0 {
-        // Prevent first stake/restake if vault already has a balance (yield must be removed first)
-        // This ensures the first stake establishes a correct 1:1 exchange rate
         require!(
             vault_underlying_balance == 0,
             ErrorCode::InvalidVaultBalance
         );
-        return Ok(underlying_amount);
+        return scale_amount_to_new_decimals(
+            underlying_amount,
+            underlying_decimals,
+            liquid_staking_decimals,
+            ErrorCode::CalculationOverflow,
+        );
     }
 
     // Reject if no vault balance to back the shares
