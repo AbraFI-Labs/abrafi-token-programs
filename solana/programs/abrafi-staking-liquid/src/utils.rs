@@ -13,7 +13,6 @@ use crate::error::ErrorCode;
 pub use shared::utils::calculations::{
     safe_add_delay,
     calculate_minimum_amount_from_decimals,
-    scale_amount_to_new_decimals,
 };
 
 /// Re-export shared validation functions
@@ -25,92 +24,76 @@ pub use shared::utils::validations::{
     validate_timestamp_has_passed,
 };
 
-/// Convert underlying amount to liquid staking token amount (shares) using conversion rate calculation with vault balance
+/// Returns 10^decimals as the virtual offset for share/asset conversions.
+/// This permanently locks a small virtual deposit in the pool, making donation attacks
+/// economically infeasible while having negligible impact on the exchange rate at scale.
+fn virtual_offset_for(decimals: u8) -> Result<u64> {
+    10u64
+        .checked_pow(decimals as u32)
+        .ok_or(Error::from(ErrorCode::CalculationOverflow))
+}
+
+/// Convert underlying amount to liquid staking tokens: underlying * (supply + V) / (vault + V)
 pub fn convert_to_shares(
     underlying_amount: u64,
     vault_underlying_balance: u64,
     liquid_staking_token_supply: u64,
     underlying_decimals: u8,
-    liquid_staking_decimals: u8,
 ) -> Result<u64> {
-    // Validate non-zero input
     require!(underlying_amount > 0, ErrorCode::InvalidAmount);
 
-    // First staker: scale the underlying amount to the liquid staking token's decimal precision.
-    // Without this, depositing into a fresh vault returns raw base units of the underlying as
-    // liquid staking base units — wrong when the two tokens have different decimal counts.
-    if liquid_staking_token_supply == 0 {
-        require!(
-            vault_underlying_balance == 0,
-            ErrorCode::InvalidVaultBalance
-        );
-        return scale_amount_to_new_decimals(
-            underlying_amount,
-            underlying_decimals,
-            liquid_staking_decimals,
-            ErrorCode::CalculationOverflow,
-        );
-    }
+    let virtual_offset = virtual_offset_for(underlying_decimals)?;
 
-    // Reject if no vault balance to back the shares
-    require!(
-        vault_underlying_balance > 0,
-        ErrorCode::InsufficientLiquidity
-    );
-
-    // Calculate shares: (underlying_amount * liquid_staking_token_supply) / vault_underlying_balance
-    let shares = (underlying_amount as u128)
-        .checked_mul(liquid_staking_token_supply as u128)
-        .ok_or(Error::from(ErrorCode::CalculationOverflow))?
-        .checked_div(vault_underlying_balance as u128)
+    let effective_supply = (liquid_staking_token_supply as u128)
+        .checked_add(virtual_offset as u128)
+        .ok_or(Error::from(ErrorCode::CalculationOverflow))?;
+    let effective_vault = (vault_underlying_balance as u128)
+        .checked_add(virtual_offset as u128)
         .ok_or(Error::from(ErrorCode::CalculationOverflow))?;
 
-    // Reject deposits/restakes that would mint zero shares
+    let shares = (underlying_amount as u128)
+        .checked_mul(effective_supply)
+        .ok_or(Error::from(ErrorCode::CalculationOverflow))?
+        .checked_div(effective_vault)
+        .ok_or(Error::from(ErrorCode::CalculationOverflow))?;
+
     require!(shares > 0, ErrorCode::InvalidAmount);
 
-    // Convert to u64, ensuring no truncation
     let shares_u64 = u64::try_from(shares).map_err(|_| ErrorCode::CalculationOverflow)?;
     Ok(shares_u64)
 }
 
-/// Convert liquid staking token amount to underlying amount (assets) using conversion rate calculation with vault balance
+/// Convert liquid staking tokens to underlying amount: liquid_staking_token_amount * (vault + V) / (supply + V)
 pub fn convert_to_assets(
     liquid_staking_amount: u64,
     vault_underlying_balance: u64,
     liquid_staking_token_supply: u64,
+    underlying_decimals: u8,
 ) -> Result<u64> {
-    // Validate non-zero input
     require!(liquid_staking_amount > 0, ErrorCode::InvalidAmount);
 
-    // Ensure there are underlying tokens to back the conversion (prevents division by zero)
-    require!(
-        liquid_staking_token_supply > 0,
-        ErrorCode::InsufficientLiquidity
-    );
+    let virtual_offset = virtual_offset_for(underlying_decimals)?;
 
-    // Ensure the requested amount doesn't exceed the total supply
     require!(
         liquid_staking_amount <= liquid_staking_token_supply,
         ErrorCode::InvalidAmount
     );
 
-    // Ensure the vault has assets to back the conversion
-    require!(
-        vault_underlying_balance > 0,
-        ErrorCode::InsufficientLiquidity
-    );
-
-    // Calculate assets: (liquid_staking_amount * vault_underlying_balance) / liquid_staking_token_supply
-    let assets = (liquid_staking_amount as u128)
-        .checked_mul(vault_underlying_balance as u128)
-        .ok_or(Error::from(ErrorCode::CalculationOverflow))?
-        .checked_div(liquid_staking_token_supply as u128)
+    let effective_vault = (vault_underlying_balance as u128)
+        .checked_add(virtual_offset as u128)
+        .ok_or(Error::from(ErrorCode::CalculationOverflow))?;
+    let effective_supply = (liquid_staking_token_supply as u128)
+        .checked_add(virtual_offset as u128)
         .ok_or(Error::from(ErrorCode::CalculationOverflow))?;
 
-    // Reject conversions that would yield zero assets
+    let assets = (liquid_staking_amount as u128)
+        .checked_mul(effective_vault)
+        .ok_or(Error::from(ErrorCode::CalculationOverflow))?
+        .checked_div(effective_supply)
+        .ok_or(Error::from(ErrorCode::CalculationOverflow))?;
+
     require!(assets > 0, ErrorCode::InvalidAmount);
 
-    // Convert to u64, ensuring no truncation
     let assets_u64 = u64::try_from(assets).map_err(|_| ErrorCode::CalculationOverflow)?;
     Ok(assets_u64)
 }

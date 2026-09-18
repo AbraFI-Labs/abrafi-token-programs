@@ -54,6 +54,12 @@ pub fn add_recipient_handler(
         ErrorCode::InvalidConfiguration
     );
 
+    // Prevent the same balance_source from being counted multiple times during distribution
+    require!(
+        ctx.accounts.state.recipients.iter().all(|r| r.balance_source != balance_source),
+        ErrorCode::InvalidBalanceSource
+    );
+
     require!(
         balance_source != Pubkey::default(),
         ErrorCode::InvalidBalanceSource
@@ -90,6 +96,12 @@ pub fn add_recipient_handler(
             require!(
                 staking_state.stake_mint == ctx.accounts.state.yield_token_mint,
                 ErrorCode::InvalidBalanceSource
+            );
+            // Destination must be the staking program's canonical vault so yield lands
+            // in the right account and the router's balance_source read is consistent.
+            require!(
+                destination == staking_state.staking_vault,
+                ErrorCode::InvalidDestination
             );
         }
         RecipientType::LiquidStaking | RecipientType::External => {

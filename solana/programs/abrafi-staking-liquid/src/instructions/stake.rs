@@ -101,7 +101,6 @@ pub fn stake_handler(ctx: Context<Stake>, underlying_amount: u64) -> Result<()> 
         ctx.accounts.vault_token_account.amount,
         ctx.accounts.liquid_staking_token_mint.supply,
         ctx.accounts.underlying_token_mint.decimals,
-        ctx.accounts.liquid_staking_token_mint.decimals,
     )?;
 
     // Transfer underlying tokens from user to vault

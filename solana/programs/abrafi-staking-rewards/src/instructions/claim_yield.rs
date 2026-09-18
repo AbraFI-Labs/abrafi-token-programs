@@ -45,6 +45,7 @@ pub fn claim_yield_handler(ctx: Context<ClaimYield>) -> Result<()> {
     let compounded = update_pending_rewards(
         &mut ctx.accounts.state,
         &mut ctx.accounts.user_stake,
+        true,
     )?;
 
     require!(compounded > 0, ErrorCode::NoPendingRewards);

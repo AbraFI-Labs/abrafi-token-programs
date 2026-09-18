@@ -26,7 +26,7 @@ pub struct ClaimUnmint<'info> {
         bump = state.state_bump,
         has_one = abrafi_backed_token_mint,
     )]
-    pub state: Account<'info, ProgramState>,
+    pub state: Box<Account<'info, ProgramState>>,
 
     /// User who requested the unmint
     #[account(mut)]
@@ -42,21 +42,20 @@ pub struct ClaimUnmint<'info> {
 
     /// The abrafi token mint
     #[account(mut)]
-    pub abrafi_backed_token_mint: Account<'info, Mint>,
+    pub abrafi_backed_token_mint: Box<Account<'info, Mint>>,
 
     /// Claim token mint
     /// This is the token mint that the user wants to claim
     #[account(mut)]
-    pub claim_token_mint: Account<'info, Mint>,
+    pub claim_token_mint: Box<Account<'info, Mint>>,
 
     /// User's abrafi token account
     #[account(
-        mut,
         associated_token::authority = user,
         associated_token::mint = abrafi_backed_token_mint,
         constraint = !user_abrafi_backed_token_account.is_frozen() @ ErrorCode::AccountFrozen,
     )]
-    pub user_abrafi_backed_token_account: Account<'info, TokenAccount>,
+    pub user_abrafi_backed_token_account: Box<Account<'info, TokenAccount>>,
 
     /// User's claimed token account (will be created if it doesn't exist)
     #[account(
@@ -66,7 +65,7 @@ pub struct ClaimUnmint<'info> {
         associated_token::mint = claim_token_mint,
         constraint = !user_claim_token_account.is_frozen() @ ErrorCode::AccountFrozen,
     )]
-    pub user_claim_token_account: Account<'info, TokenAccount>,
+    pub user_claim_token_account: Box<Account<'info, TokenAccount>>,
 
     /// Escrow token account for holding abrafi tokens during unmint process
     #[account(
@@ -74,7 +73,7 @@ pub struct ClaimUnmint<'info> {
         associated_token::authority = user_unmint_details,
         associated_token::mint = abrafi_backed_token_mint,
     )]
-    pub escrow_token_account: Account<'info, TokenAccount>,
+    pub escrow_token_account: Box<Account<'info, TokenAccount>>,
 
     /// Withdrawal vault account for the claimed token
     #[account(
@@ -82,16 +81,16 @@ pub struct ClaimUnmint<'info> {
         associated_token::mint = claim_token_mint,
         associated_token::authority = vault_authority,
     )]
-    pub vault_token_account: Account<'info, TokenAccount>,
+    pub vault_token_account: Box<Account<'info, TokenAccount>>,
 
     /// User's unmint details account
     #[account(
         mut,
         seeds = [UNMINT_DETAILS_SEED, user.key().as_ref(), claim_token_mint.key().as_ref()],
         bump = user_unmint_details.bump,
-        has_one = claim_token_mint
+        has_one = claim_token_mint,
     )]
-    pub user_unmint_details: Account<'info, UserUnmintDetails>,
+    pub user_unmint_details: Box<Account<'info, UserUnmintDetails>>,
 
     /// Mint whitelist entry account (required if whitelist is enabled)
     /// CHECK: Validated in handler if whitelist is enabled
@@ -111,7 +110,7 @@ pub struct ClaimUnmint<'info> {
 /// This burns the abrafi tokens and transfers the claimed tokens to the user
 /// Users can claim partial amounts, reducing the requested amount accordingly
 pub fn claim_unmint_handler(ctx: Context<ClaimUnmint>, claim_amount: u64) -> Result<()> {
-    let state = &ctx.accounts.state;
+    let state = &mut ctx.accounts.state;
     let user = &ctx.accounts.user;
     let user_unmint_details = &mut ctx.accounts.user_unmint_details;
 
@@ -140,6 +139,11 @@ pub fn claim_unmint_handler(ctx: Context<ClaimUnmint>, claim_amount: u64) -> Res
         state.minimum_unmint_amount,
         ErrorCode::AmountBelowMinimum,
     )?;
+
+    require!(
+        claim_amount <= user_unmint_details.requested_amount,
+        ErrorCode::ClaimAmountExceedsRequest
+    );
 
     // Check if the withdrawal delay has passed
     validate_timestamp_has_passed(
@@ -174,6 +178,10 @@ pub fn claim_unmint_handler(ctx: Context<ClaimUnmint>, claim_amount: u64) -> Res
         claim_amount,
         ctx.accounts.abrafi_backed_token_mint.decimals,
     )?;
+
+    user_unmint_details.requested_amount = user_unmint_details.requested_amount
+        .checked_sub(claim_amount)
+        .ok_or(Error::from(ErrorCode::CalculationOverflow))?;
 
     // Convert abrafi token amount to collateral amount accounting for decimal differences
     let collateral_amount = scale_amount_to_new_decimals(

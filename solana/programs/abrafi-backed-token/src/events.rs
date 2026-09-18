@@ -263,3 +263,4 @@ pub struct TokenMetadataUpdated {
     pub metadata_uri: String,
     pub was_created: bool,
 }
+

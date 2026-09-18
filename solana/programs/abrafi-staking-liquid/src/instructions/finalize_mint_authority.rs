@@ -48,8 +48,7 @@ pub struct FinalizeMintAuthority<'info> {
 }
 
 /// Finalize the mint authority transfer (step 2: new mint authority accepts)
-/// This completes the mint authority transfer by actually transferring the mint authority
-/// Also transfers ownership of the vault token account to the new mint authority
+/// Transfers vault token account ownership, mint authority, and freeze authority to the new authority.
 /// Must be called before it expires
 pub fn finalize_mint_authority_handler(ctx: Context<FinalizeMintAuthority>) -> Result<()> {
     let pending_mint_authority = ctx.accounts.pending_mint_authority.key();
@@ -68,12 +67,15 @@ pub fn finalize_mint_authority_handler(ctx: Context<FinalizeMintAuthority>) -> R
         ErrorCode::PendingAuthorityExpired
     );
 
+    // Staking must remain disabled when finalization executes — verified at proposal time and now
+    require!(!ctx.accounts.state.is_staking_enabled, ErrorCode::InvalidConfiguration);
+
     // Extract state_bump before creating mutable borrow
     let state_bump = ctx.accounts.state.state_bump;
     let seeds = &[STATE_SEED, &[state_bump]];
     let signer = &[&seeds[..]];
 
-    // Transfer ownership of the vault token account from state PDA to new mint authority
+    // Transfer ownership of the vault token account from state PDA to new authority
     token::set_authority(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
@@ -98,6 +100,20 @@ pub fn finalize_mint_authority_handler(ctx: Context<FinalizeMintAuthority>) -> R
             signer,
         ),
         anchor_spl::token::spl_token::instruction::AuthorityType::MintTokens,
+        Some(pending_mint_authority),
+    )?;
+
+    // Transfer freeze authority from state PDA to new authority
+    token::set_authority(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            SetAuthority {
+                current_authority: ctx.accounts.state.to_account_info(),
+                account_or_mint: ctx.accounts.liquid_staking_token_mint.to_account_info(),
+            },
+            signer,
+        ),
+        anchor_spl::token::spl_token::instruction::AuthorityType::FreezeAccount,
         Some(pending_mint_authority),
     )?;
 

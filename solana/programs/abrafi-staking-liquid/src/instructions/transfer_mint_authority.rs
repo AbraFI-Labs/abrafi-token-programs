@@ -55,12 +55,6 @@ pub fn transfer_mint_authority_handler(ctx: Context<TransferMintAuthority>) -> R
         ErrorCode::InvalidConfiguration
     );
 
-    // Validate that request unstaking is disabled (required before transferring mint authority)
-    require!(
-        !state.is_unstaking_request_enabled,
-        ErrorCode::InvalidConfiguration
-    );
-
     // Check if this is a cancellation request (None = cancel)
     if let None = ctx.accounts.new_mint_authority {
         // Only allow cancellation if there's a pending mint authority to cancel

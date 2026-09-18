@@ -73,9 +73,13 @@ pub enum ErrorCode {
     #[msg("Pending authority transfer has expired")]
     PendingAuthorityExpired,
 
+
     // WHITELIST ERRORS
     #[msg("Address is not whitelisted")]
     AddressNotWhitelisted,
     #[msg("Address is already whitelisted")]
     AddressAlreadyWhitelisted,
+    #[msg("Claim amount exceeds the requested unmint amount")]
+    ClaimAmountExceedsRequest,
+
 }

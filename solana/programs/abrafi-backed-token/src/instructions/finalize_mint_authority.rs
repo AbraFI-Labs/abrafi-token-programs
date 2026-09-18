@@ -54,6 +54,9 @@ pub fn finalize_mint_authority_handler(ctx: Context<FinalizeMintAuthority>) -> R
         ErrorCode::PendingAuthorityExpired
     );
 
+    require!(!ctx.accounts.state.is_minting_enabled, ErrorCode::InvalidConfiguration);
+    require!(!ctx.accounts.state.is_unminting_request_enabled, ErrorCode::InvalidConfiguration);
+
     // Extract state_bump before creating mutable borrow
     let state_bump = ctx.accounts.state.state_bump;
     // Transfer mint authority from state PDA to new authority
@@ -70,6 +73,20 @@ pub fn finalize_mint_authority_handler(ctx: Context<FinalizeMintAuthority>) -> R
             signer,
         ),
         anchor_spl::token::spl_token::instruction::AuthorityType::MintTokens,
+        Some(pending_mint_authority),
+    )?;
+
+    // Transfer freeze authority alongside mint authority so the recipient has full mint control
+    token::set_authority(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            SetAuthority {
+                current_authority: ctx.accounts.state.to_account_info(),
+                account_or_mint: ctx.accounts.abrafi_backed_token_mint.to_account_info(),
+            },
+            signer,
+        ),
+        anchor_spl::token::spl_token::instruction::AuthorityType::FreezeAccount,
         Some(pending_mint_authority),
     )?;
 
