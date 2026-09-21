@@ -48,4 +48,5 @@ pub enum ErrorCode {
     NoStakersToReceiveYield,
     #[msg("No pending rewards to claim")]
     NoPendingRewards,
+
 }

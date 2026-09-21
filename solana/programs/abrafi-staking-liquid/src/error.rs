@@ -72,4 +72,5 @@ pub enum ErrorCode {
     InvalidConfiguration,
     #[msg("Pending authority transfer has expired")]
     PendingAuthorityExpired,
+
 }

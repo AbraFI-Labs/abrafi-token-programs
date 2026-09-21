@@ -53,7 +53,6 @@ pub fn calculate_stake_amount_handler(
         ctx.accounts.vault_token_account.amount,
         ctx.accounts.liquid_staking_token_mint.supply,
         ctx.accounts.underlying_token_mint.decimals,
-        ctx.accounts.liquid_staking_token_mint.decimals,
     )?;
 
     Ok(expected_liquid_staking_amount)
@@ -75,6 +74,7 @@ pub fn calculate_unstake_amount_handler(
         liquid_staking_amount,
         ctx.accounts.vault_token_account.amount,
         ctx.accounts.liquid_staking_token_mint.supply,
+        ctx.accounts.underlying_token_mint.decimals,
     )?;
 
     Ok(expected_underlying_amount)

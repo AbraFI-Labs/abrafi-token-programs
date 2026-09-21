@@ -24,8 +24,8 @@ pub use claim_unstake::*;
 pub mod set_unstake_claim_enabled;
 pub use set_unstake_claim_enabled::*;
 
-pub mod post_yield;
-pub use post_yield::*;
+pub mod settle_yield;
+pub use settle_yield::*;
 
 pub mod claim_yield;
 pub use claim_yield::*;
@@ -44,6 +44,7 @@ pub use finalize_authority::*;
 
 pub mod update_operations_authority;
 pub use update_operations_authority::*;
+
 
 #[cfg(feature = "test")]
 pub mod set_withdrawal_delay_for_testing;

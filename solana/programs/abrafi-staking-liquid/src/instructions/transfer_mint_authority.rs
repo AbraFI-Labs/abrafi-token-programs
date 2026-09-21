@@ -55,7 +55,8 @@ pub fn transfer_mint_authority_handler(ctx: Context<TransferMintAuthority>) -> R
         ErrorCode::InvalidConfiguration
     );
 
-    // Validate that request unstaking is disabled (required before transferring mint authority)
+    // Validate that unstake requests are disabled to prevent new positions being
+    // opened during the authority handover window
     require!(
         !state.is_unstaking_request_enabled,
         ErrorCode::InvalidConfiguration

@@ -89,6 +89,11 @@ pub mod abrafi_backed_token {
         cancel_unmint_handler(ctx, cancel_amount)
     }
 
+    /// Expands a UserUnmintDetails account to the current layout. Idempotent.
+    pub fn migrate_unmint_details(ctx: Context<MigrateUnmintDetails>) -> Result<()> {
+        migrate_unmint_details_handler(ctx)
+    }
+
     /// Update the minimum amount that can be minted
     /// Only the operations authority can change the minimum mint amount
     pub fn update_minimum_mint_amount(
@@ -398,6 +403,7 @@ mod tests {
             withdrawal_delay_end_timestamp,
             request_expiration_timestamp,
             bump: 0,
+            requested_amount: 0,
         };
 
         assert_eq!(unmint_details.claim_token_mint, claim_token_mint);
@@ -691,6 +697,7 @@ mod tests {
             withdrawal_delay_end_timestamp: 1641600000i64,
             request_expiration_timestamp: 1642204800i64,
             bump: 0,
+            requested_amount: 0,
         };
 
         // Test that the struct can be serialized and deserialized
@@ -730,6 +737,7 @@ mod tests {
             withdrawal_delay_end_timestamp: max_i64,
             request_expiration_timestamp: max_i64,
             bump: u8::MAX,
+            requested_amount: u64::MAX,
         };
 
         assert_eq!(unmint_details.request_timestamp, max_i64);
@@ -749,6 +757,7 @@ mod tests {
             withdrawal_delay_end_timestamp: zero_i64,
             request_expiration_timestamp: zero_i64,
             bump: 0,
+            requested_amount: 0,
         };
 
         assert_eq!(unmint_details.request_timestamp, zero_i64);
@@ -768,6 +777,7 @@ mod tests {
             withdrawal_delay_end_timestamp: negative_timestamp,
             request_expiration_timestamp: negative_timestamp,
             bump: 0,
+            requested_amount: 0,
         };
 
         assert_eq!(unmint_details.request_timestamp, negative_timestamp);

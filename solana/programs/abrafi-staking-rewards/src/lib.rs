@@ -67,8 +67,8 @@ pub mod abrafi_staking_rewards {
         set_unstake_claim_enabled_handler(ctx, enabled)
     }
 
-    pub fn post_yield(ctx: Context<PostYield>, amount: u64) -> Result<()> {
-        post_yield_handler(ctx, amount)
+    pub fn settle_yield(ctx: Context<SettleYield>) -> Result<()> {
+        settle_yield_handler(ctx)
     }
 
     pub fn claim_yield(ctx: Context<ClaimYield>) -> Result<()> {
@@ -171,7 +171,7 @@ mod tests {
         let mut state = make_test_state(1000, global_index);
         state.total_yield_allocated = 100;
         let mut user_stake = make_test_user_stake(1000, 0, 0);
-        let compounded = utils::update_pending_rewards(&mut state, &mut user_stake).unwrap();
+        let compounded = utils::update_pending_rewards(&mut state, &mut user_stake, true).unwrap();
         assert_eq!(compounded, 100);
         assert_eq!(user_stake.staked_amount, 1100);
         assert_eq!(state.total_staked, 1100);
@@ -184,7 +184,7 @@ mod tests {
         let global_index = 100_000_000_000_000_000u128;
         let mut state = make_test_state(0, global_index);
         let mut user_stake = make_test_user_stake(0, 0, 0);
-        let compounded = utils::update_pending_rewards(&mut state, &mut user_stake).unwrap();
+        let compounded = utils::update_pending_rewards(&mut state, &mut user_stake, true).unwrap();
         assert_eq!(compounded, 0);
         assert_eq!(user_stake.staked_amount, 0);
         assert_eq!(state.total_staked, 0);
@@ -196,7 +196,7 @@ mod tests {
         // Index has not moved since user's last snapshot — nothing to compound.
         let mut state = make_test_state(1000, 0);
         let mut user_stake = make_test_user_stake(1000, 0, 0);
-        let compounded = utils::update_pending_rewards(&mut state, &mut user_stake).unwrap();
+        let compounded = utils::update_pending_rewards(&mut state, &mut user_stake, true).unwrap();
         assert_eq!(compounded, 0);
         assert_eq!(user_stake.staked_amount, 1000);
         assert_eq!(state.total_staked, 1000);
@@ -207,7 +207,7 @@ mod tests {
         // staked_amount = u64::MAX, index_delta = u128::MAX → intermediate product overflows.
         let mut state = make_test_state(u64::MAX, u128::MAX);
         let mut user_stake = make_test_user_stake(u64::MAX, 0, 0);
-        let result = utils::update_pending_rewards(&mut state, &mut user_stake);
+        let result = utils::update_pending_rewards(&mut state, &mut user_stake, true);
         assert!(result.is_err());
     }
 
@@ -217,7 +217,7 @@ mod tests {
         let global_index = 2 * constants::PRECISION_FACTOR;
         let mut state = make_test_state(u64::MAX, global_index);
         let mut user_stake = make_test_user_stake(u64::MAX, 0, 0);
-        let result = utils::update_pending_rewards(&mut state, &mut user_stake);
+        let result = utils::update_pending_rewards(&mut state, &mut user_stake, true);
         assert!(result.is_err());
     }
 
@@ -228,8 +228,41 @@ mod tests {
         let global_index = constants::PRECISION_FACTOR;
         let mut state = make_test_state(u64::MAX, global_index);
         let mut user_stake = make_test_user_stake(u64::MAX, 0, 0);
-        let result = utils::update_pending_rewards(&mut state, &mut user_stake);
+        let result = utils::update_pending_rewards(&mut state, &mut user_stake, true);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_update_pending_rewards_no_compound_accumulates_pending() {
+        // compound=false: earned goes to pending_rewards, staked_amount unchanged.
+        let global_index = 100_000_000_000_000_000u128;
+        let mut state = make_test_state(1000, global_index);
+        state.total_yield_allocated = 100;
+        let mut user_stake = make_test_user_stake(1000, 0, 0);
+        let result = utils::update_pending_rewards(&mut state, &mut user_stake, false).unwrap();
+        assert_eq!(result, 0);
+        assert_eq!(user_stake.staked_amount, 1000);
+        assert_eq!(user_stake.pending_rewards, 100);
+        assert_eq!(state.total_staked, 1000);
+        assert_eq!(state.total_yield_allocated, 100);
+        assert_eq!(user_stake.reward_index_snapshot, global_index);
+    }
+
+    #[test]
+    fn test_update_pending_rewards_compound_drains_pending() {
+        // After no-compound accumulation, compound=true drains pending + new earned.
+        let global_index = 200_000_000_000_000_000u128;
+        let mut state = make_test_state(1000, global_index);
+        state.total_yield_allocated = 200;
+        // User has 50 pre-accumulated in pending_rewards and snapshot at half the index.
+        let mut user_stake = make_test_user_stake(1000, 100_000_000_000_000_000u128, 50);
+        let result = utils::update_pending_rewards(&mut state, &mut user_stake, true).unwrap();
+        // newly_earned = 1000 * 10^17 / 10^18 = 100; total = 100 + 50 = 150
+        assert_eq!(result, 150);
+        assert_eq!(user_stake.staked_amount, 1150);
+        assert_eq!(user_stake.pending_rewards, 0);
+        assert_eq!(state.total_staked, 1150);
+        assert_eq!(state.total_yield_allocated, 50);
     }
 
     // ─── helpers ────────────────────────────────────────────────────────────────

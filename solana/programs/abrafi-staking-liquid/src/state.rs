@@ -57,6 +57,7 @@ pub struct ProgramState {
     pub pending_mint_authority: Pubkey,
     /// Timestamp when pending_mint_authority expires (must be finalized before this time)
     pub pending_mint_authority_expiration_timestamp: i64,
+
 }
 
 /// Per-user account to track unstake requests

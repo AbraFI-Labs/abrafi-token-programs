@@ -62,6 +62,7 @@ pub struct Mint<'info> {
     #[account(
         mut,
         constraint = treasury_token_account.mint == collateral_token_mint.key() @ ErrorCode::InvalidMintAccount,
+        constraint = treasury_token_account.key() != user_collateral_token_account.key() @ ErrorCode::InvalidTreasuryAccount,
     )]
     pub treasury_token_account: Account<'info, TokenAccount>,
 

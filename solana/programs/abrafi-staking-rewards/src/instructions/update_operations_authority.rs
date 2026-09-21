@@ -17,7 +17,8 @@ pub struct UpdateOperationsAuthority<'info> {
     pub authority: Signer<'info>,
     #[account(
         constraint = new_operations_authority.key() != Pubkey::default()
-            && new_operations_authority.key() != authority.key() @ ErrorCode::InvalidConfiguration,
+            && new_operations_authority.key() != authority.key()
+            && new_operations_authority.key() != state.pending_authority @ ErrorCode::InvalidConfiguration,
     )]
     pub new_operations_authority: SystemAccount<'info>,
 }

@@ -87,7 +87,7 @@ pub struct RequestUnmint<'info> {
 
 /// Request to unmint abrafi tokens back to a collateral token
 pub fn request_unmint_handler(ctx: Context<RequestUnmint>, amount: u64) -> Result<()> {
-    let state = &ctx.accounts.state;
+    let state = &mut ctx.accounts.state;
     let user_unmint_details = &mut ctx.accounts.user_unmint_details;
 
     let clock = Clock::get()?;
@@ -116,8 +116,11 @@ pub fn request_unmint_handler(ctx: Context<RequestUnmint>, amount: u64) -> Resul
     find_enabled_token_config(state, &ctx.accounts.claim_token_mint.key())
         .ok_or(ErrorCode::TokenNotConfigured)?;
 
-    // Check if there's an existing request and determine if it's active or expired
-    let has_existing_request = ctx.accounts.escrow_token_account.amount > 0;
+    // Must precede any branch: init_if_needed leaves bump=0; expired-branch CPI signing requires the correct value.
+    user_unmint_details.bump = ctx.bumps.user_unmint_details;
+
+    // Escrow balance is manipulable via direct ATA top-up; version==1 is the tamper-proof existence sentinel.
+    let has_existing_request = user_unmint_details.version == 1;
     let has_active_request = has_existing_request
         && clock.unix_timestamp < user_unmint_details.request_expiration_timestamp;
     let has_expired_request = has_existing_request && !has_active_request;
@@ -153,6 +156,7 @@ pub fn request_unmint_handler(ctx: Context<RequestUnmint>, amount: u64) -> Resul
         user_unmint_details.request_timestamp = 0;
         user_unmint_details.withdrawal_delay_end_timestamp = 0;
         user_unmint_details.request_expiration_timestamp = 0;
+        user_unmint_details.requested_amount = 0;
 
         // Emit event for expired request cancellation
         emit!(UnmintCancelled {
@@ -193,6 +197,10 @@ pub fn request_unmint_handler(ctx: Context<RequestUnmint>, amount: u64) -> Resul
 
         // Update request timestamp to current time (restart cooldown)
         user_unmint_details.request_timestamp = clock.unix_timestamp;
+
+        user_unmint_details.requested_amount = user_unmint_details.requested_amount
+            .checked_add(amount)
+            .ok_or(Error::from(ErrorCode::CalculationOverflow))?;
     } else {
         // Handle new request
         token::transfer_checked(
@@ -215,6 +223,7 @@ pub fn request_unmint_handler(ctx: Context<RequestUnmint>, amount: u64) -> Resul
         user_unmint_details.request_timestamp = clock.unix_timestamp;
         // withdrawal_delay_end_timestamp and request_expiration_timestamp are set below
         user_unmint_details.bump = ctx.bumps.user_unmint_details;
+        user_unmint_details.requested_amount = amount;
     }
 
     // Compute withdrawal delay and request expiration using the resolved cooldown.
@@ -249,7 +258,7 @@ pub fn request_unmint_handler(ctx: Context<RequestUnmint>, amount: u64) -> Resul
     emit!(UnmintRequested {
         version: 1,
         user: ctx.accounts.user.key(),
-        requested_amount: ctx.accounts.escrow_token_account.amount,
+        requested_amount: user_unmint_details.requested_amount,
         request_timestamp: user_unmint_details.request_timestamp,
         withdrawal_delay_end_timestamp: user_unmint_details.withdrawal_delay_end_timestamp,
         claim_token_mint: ctx.accounts.claim_token_mint.key(),

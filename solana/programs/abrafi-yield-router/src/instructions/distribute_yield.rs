@@ -10,6 +10,8 @@ use crate::constants::STATE_SEED;
 use crate::error::ErrorCode;
 use crate::events::YieldDistributed;
 use crate::state::{enabled_recipient_count, RecipientType, RouterState};
+use abrafi_staking_rewards::cpi as staking_cpi;
+use abrafi_staking_rewards::cpi::accounts::SettleYield as SettleYieldAccounts;
 
 #[derive(Accounts)]
 pub struct DistributeYield<'info> {
@@ -30,11 +32,11 @@ pub struct DistributeYield<'info> {
     pub yield_token_mint: Account<'info, Mint>,
 
     pub token_program: Program<'info, Token>,
-    // remaining_accounts: interleaved pairs per enabled recipient, in Vec order:
-    //   [balance_src_0 (readonly), dest_0 (writable), balance_src_1 (readonly), dest_1 (writable), ...]
-    // Count must equal enabled_recipient_count * 2.
-    // StakingRewards balance_src: abrafi-staking-rewards ProgramState PDA (total_staked).
-    // LiquidStaking / External balance_src: same as dest — token account amount.
+    // remaining_accounts: per enabled recipient (in Vec order), slot count varies by type:
+    //   StakingRewards:    [staking_state_pda (writable), staking_vault (writable), staking_program]
+    //   LiquidStaking:     [vault (writable, == dest), dest (writable)]
+    //   External:          [vault (writable, == dest), dest (writable)]
+    // StakingRewards state PDA must be writable because settle_yield CPI updates global_reward_index.
     // Fixed 10-slot approach hits BPF stack limit — remaining_accounts is the correct Solana
     // pattern for variable-length account lists.
 }
@@ -51,10 +53,11 @@ pub fn distribute_yield_handler<'a, 'b, 'c, 'info>(
         ErrorCode::AmountBelowMinimum
     );
 
-    let enabled_count = enabled_recipient_count(&ctx.accounts.state.recipients);
-    let expected_accounts = enabled_count
-        .checked_mul(2)
-        .ok_or(ErrorCode::CalculationOverflow)?;
+    // StakingRewards recipients need 3 accounts each; others need 2.
+    let expected_accounts: usize = ctx.accounts.state.recipients.iter()
+        .filter(|r| r.enabled)
+        .map(|r| if r.recipient_type == RecipientType::StakingRewards { 3 } else { 2 })
+        .sum();
     require!(
         ctx.remaining_accounts.len() == expected_accounts,
         ErrorCode::RecipientAccountMismatch
@@ -71,7 +74,7 @@ pub fn distribute_yield_handler<'a, 'b, 'c, 'info>(
 
     // ── Phase 1: read balances and validate account addresses ─────────────────
     let mut balances: Vec<u64> = Vec::with_capacity(recipients.len());
-    let mut pair_idx: usize = 0;
+    let mut account_offset: usize = 0;
 
     for recipient in recipients.iter() {
         if !recipient.enabled {
@@ -79,9 +82,10 @@ pub fn distribute_yield_handler<'a, 'b, 'c, 'info>(
             continue;
         }
 
-        let balance_src = &remaining[pair_idx * 2];
-        let dest_acct   = &remaining[pair_idx * 2 + 1];
-        pair_idx += 1;
+        let slot_count = if recipient.recipient_type == RecipientType::StakingRewards { 3 } else { 2 };
+        let balance_src = &remaining[account_offset];
+        let dest_acct   = &remaining[account_offset + 1];
+        account_offset += slot_count;
 
         require!(
             balance_src.key() == recipient.balance_source,
@@ -91,11 +95,17 @@ pub fn distribute_yield_handler<'a, 'b, 'c, 'info>(
             dest_acct.key() == recipient.destination,
             ErrorCode::InvalidRecipientAccount
         );
-        // balance_source is read-only; destination must be writable for the CPI transfer.
-        require!(!balance_src.is_writable, ErrorCode::InvalidRecipientAccount);
-        require!(dest_acct.is_writable,    ErrorCode::InvalidRecipientAccount);
+        // StakingRewards balance_src (staking state PDA) must be writable because
+        // settle_yield CPI updates global_reward_index on it.
+        // LiquidStaking/External balance_src == destination, so is_writable is already ensured
+        // by the dest check below. Non-StakingRewards types where balance_src != dest (none
+        // currently) would be read-only — enforce that here.
+        if balance_src.key() != dest_acct.key() && recipient.recipient_type != RecipientType::StakingRewards {
+            require!(!balance_src.is_writable, ErrorCode::InvalidRecipientAccount);
+        }
+        require!(dest_acct.is_writable, ErrorCode::InvalidRecipientAccount);
 
-        let balance = read_balance(balance_src, &recipient.recipient_type, &yield_token_mint_key, recipient.staking_program_id)?;
+        let balance = read_balance(balance_src, &dest_acct.key(), &recipient.recipient_type, &yield_token_mint_key, recipient.staking_program_id)?;
         balances.push(balance);
     }
 
@@ -104,7 +114,7 @@ pub fn distribute_yield_handler<'a, 'b, 'c, 'info>(
 
     // ── Phase 2: calculate proportional amounts and transfer ──────────────────
     let mut amounts_per_recipient: Vec<u64> = Vec::with_capacity(recipients.len());
-    let mut pair_idx: usize = 0;
+    let mut account_offset2: usize = 0;
     let mut total_transferred: u64 = 0;
 
     for (i, recipient) in recipients.iter().enumerate() {
@@ -113,8 +123,10 @@ pub fn distribute_yield_handler<'a, 'b, 'c, 'info>(
             continue;
         }
 
-        let dest_acct = remaining[pair_idx * 2 + 1].clone();
-        pair_idx += 1;
+        let slot_count = if recipient.recipient_type == RecipientType::StakingRewards { 3 } else { 2 };
+        let balance_src = remaining[account_offset2].clone();
+        let dest_acct   = remaining[account_offset2 + 1].clone();
+        account_offset2 += slot_count;
 
         if balances[i] == 0 {
             amounts_per_recipient.push(0);
@@ -132,10 +144,14 @@ pub fn distribute_yield_handler<'a, 'b, 'c, 'info>(
 
         amounts_per_recipient.push(recipient_amount_u64);
 
+        if recipient_amount_u64 == 0 {
+            continue;
+        }
+
         let cpi_accounts = TransferChecked {
             from: ctx.accounts.router_vault.to_account_info(),
             mint: ctx.accounts.yield_token_mint.to_account_info(),
-            to: dest_acct,
+            to: dest_acct.clone(),
             authority: ctx.accounts.state.to_account_info(),
         };
         let cpi_ctx = CpiContext::new_with_signer(
@@ -144,6 +160,24 @@ pub fn distribute_yield_handler<'a, 'b, 'c, 'info>(
             signer_seeds,
         );
         token::transfer_checked(cpi_ctx, recipient_amount_u64, decimals)?;
+
+        // For StakingRewards: CPI into settle_yield to update the accumulator now that
+        // tokens have landed in the staking vault. This makes yield distribution atomic.
+        if recipient.recipient_type == RecipientType::StakingRewards {
+            let staking_program = remaining[account_offset2 - 1].clone();
+            require_keys_eq!(
+                staking_program.key(),
+                recipient.staking_program_id,
+                ErrorCode::InvalidRecipientAccount
+            );
+            let cpi_accounts = SettleYieldAccounts {
+                state: balance_src,
+                staking_vault: dest_acct,
+                stake_mint: ctx.accounts.yield_token_mint.to_account_info(),
+            };
+            let cpi_ctx = CpiContext::new(staking_program, cpi_accounts);
+            staking_cpi::settle_yield(cpi_ctx)?;
+        }
 
         total_transferred = total_transferred
             .checked_add(recipient_amount_u64)
@@ -173,6 +207,7 @@ pub fn distribute_yield_handler<'a, 'b, 'c, 'info>(
 /// LiquidStaking / External: deserializes an SPL token account and returns amount.
 fn read_balance(
     info: &AccountInfo,
+    dest_key: &Pubkey,
     recipient_type: &RecipientType,
     yield_token_mint: &Pubkey,
     staking_program_id: Pubkey,
@@ -205,6 +240,10 @@ fn read_balance(
             require!(
                 state.stake_mint == *yield_token_mint,
                 ErrorCode::InvalidBalanceSource
+            );
+            require!(
+                state.staking_vault == *dest_key,
+                ErrorCode::InvalidRecipientAccount
             );
             Ok(state.total_staked)
         }
