@@ -100,11 +100,11 @@ pub struct OperationsAuthorityUpdated {
 }
 
 #[event]
-pub struct YieldPosted {
+pub struct YieldSettled {
     pub version: u8,
-    pub reward_mint: Pubkey,
     pub effective_amount: u64,
     pub new_global_reward_index: u128,
+    pub reward_mint: Pubkey,
 }
 
 #[event]

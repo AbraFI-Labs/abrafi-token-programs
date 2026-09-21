@@ -66,10 +66,12 @@ pub fn stake_handler(ctx: Context<Stake>, amount: u64) -> Result<()> {
         ctx.accounts.user_stake.user = ctx.accounts.user.key();
     }
 
-    // Settle and auto-compound pending rewards before modifying staked_amount.
+    // Settle accumulator; compound only when claim_yield is enabled.
+    let claim_yield_enabled = ctx.accounts.state.claim_yield_enabled;
     let compounded = update_pending_rewards(
         &mut ctx.accounts.state,
         &mut ctx.accounts.user_stake,
+        claim_yield_enabled,
     )?;
 
     token::transfer_checked(

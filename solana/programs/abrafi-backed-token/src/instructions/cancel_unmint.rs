@@ -62,17 +62,18 @@ pub struct CancelUnmint<'info> {
 
     /// Token program for transfers
     pub token_program: Program<'info, Token>,
+
+    pub system_program: Program<'info, System>,
 }
 
 /// Cancel an unmint request (partial or full)
 /// This instruction can be called at any time to immediately cancel part or all of the request
 /// It reduces the requested amount and closes the account if fully canceled
 pub fn cancel_unmint_handler(ctx: Context<CancelUnmint>, cancel_amount: u64) -> Result<()> {
-    let state = &ctx.accounts.state;
+    let state = &mut ctx.accounts.state;
     let user = &ctx.accounts.user;
     let user_unmint_details = &mut ctx.accounts.user_unmint_details;
 
-    // Check if unminting claim is enabled (canceling recovers tokens, similar to claiming)
     require!(state.is_unminting_claim_enabled, ErrorCode::UnmintingDisabled);
 
     let escrow_balance_before = ctx.accounts.escrow_token_account.amount;
@@ -85,9 +86,14 @@ pub fn cancel_unmint_handler(ctx: Context<CancelUnmint>, cancel_amount: u64) -> 
     validate_amount_full_or_above_minimum(
         cancel_amount,
         escrow_balance_before,
-        ctx.accounts.state.minimum_mint_amount,
+        state.minimum_mint_amount,
         ErrorCode::AmountBelowMinimum,
     )?;
+
+    require!(
+        cancel_amount <= user_unmint_details.requested_amount,
+        ErrorCode::ClaimAmountExceedsRequest
+    );
 
     // Transfer abrafi tokens from escrow back to user
     token::transfer_checked(
@@ -110,6 +116,10 @@ pub fn cancel_unmint_handler(ctx: Context<CancelUnmint>, cancel_amount: u64) -> 
         ctx.accounts.abrafi_backed_token_mint.decimals,
     )?;
 
+    user_unmint_details.requested_amount = user_unmint_details.requested_amount
+        .checked_sub(cancel_amount)
+        .ok_or(Error::from(ErrorCode::CalculationOverflow))?;
+
     // Reload escrow account to get updated balance after transfer
     ctx.accounts.escrow_token_account.reload()?;
 
@@ -117,7 +127,7 @@ pub fn cancel_unmint_handler(ctx: Context<CancelUnmint>, cancel_amount: u64) -> 
     let escrow_balance_after = ctx.accounts.escrow_token_account.amount;
     validate_balance_zero_or_above_minimum(
         escrow_balance_after,
-        ctx.accounts.state.minimum_unmint_amount,
+        state.minimum_unmint_amount,
         ErrorCode::BalanceBelowMinimum,
     )?;
 

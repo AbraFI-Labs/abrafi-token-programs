@@ -102,7 +102,8 @@ pub fn update_compliance_authority_handler(ctx: Context<UpdateAuthority>) -> Res
     require!(
         new_compliance_authority != Pubkey::default()
             && new_compliance_authority != state.compliance_authority
-            && new_compliance_authority != state.authority,
+            && new_compliance_authority != state.authority
+            && new_compliance_authority != state.pending_authority,
         ErrorCode::InvalidConfiguration
     );
 
@@ -128,7 +129,8 @@ pub fn update_operations_authority_handler(ctx: Context<UpdateAuthority>) -> Res
     require!(
         new_operations_authority != Pubkey::default()
             && new_operations_authority != state.operations_authority
-            && new_operations_authority != state.authority,
+            && new_operations_authority != state.authority
+            && new_operations_authority != state.pending_authority,
         ErrorCode::InvalidConfiguration
     );
 

@@ -110,6 +110,7 @@ pub fn request_unstake_handler(ctx: Context<RequestUnstake>, liquid_staking_amou
         liquid_staking_amount,
         ctx.accounts.vault_token_account.amount,
         ctx.accounts.liquid_staking_token_mint.supply,
+        ctx.accounts.underlying_token_mint.decimals,
     )?;
 
     // Check if vault has enough balance to escrow

@@ -76,6 +76,7 @@ pub struct ProgramState {
     pub pending_mint_authority: Pubkey,
     /// Timestamp when pending_mint_authority expires (must be finalized before this time)
     pub pending_mint_authority_expiration_timestamp: i64,
+
 }
 
 /// User account structure to store unmint details in addition to the escrow token account
@@ -94,6 +95,8 @@ pub struct UserUnmintDetails {
     pub request_expiration_timestamp: i64,
     /// Bump seed for the user details account PDA
     pub bump: u8,
+    /// Total abrafi tokens deposited into escrow; claim and cancel are capped to this value
+    pub requested_amount: u64,
 }
 
 /// Mint whitelist entry account structure
