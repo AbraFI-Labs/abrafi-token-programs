@@ -51,6 +51,7 @@ pub struct ClaimUnmint<'info> {
 
     /// User's abrafi token account
     #[account(
+        mut,
         associated_token::authority = user,
         associated_token::mint = abrafi_backed_token_mint,
         constraint = !user_abrafi_backed_token_account.is_frozen() @ ErrorCode::AccountFrozen,
@@ -127,23 +128,26 @@ pub fn claim_unmint_handler(ctx: Context<ClaimUnmint>, claim_amount: u64) -> Res
         state.is_mint_whitelist_enabled,
     )?;
 
-    let escrow_balance_before = ctx.accounts.escrow_token_account.amount;
+    let recorded_amount = user_unmint_details.requested_amount;
 
-    // Check for zero amount and escrow balance
-    validate_sufficient_balance(claim_amount, escrow_balance_before, ErrorCode::InvalidAmount)?;
+    // External parties can only deposit into this PDA-owned escrow, never withdraw.
+    // This program always decrements requested_amount by the same amount it withdraws,
+    // so escrow_balance >= requested_amount must always hold.
+    validate_sufficient_balance(recorded_amount, ctx.accounts.escrow_token_account.amount, ErrorCode::InvalidAmount)?;
 
-    // Ensure claim amount is either the entire escrow balance or >= minimum unmint amount
+    // Validate against the recorded requested_amount, not the live escrow balance.
+    // The escrow ATA is an SPL token account that anyone can deposit into; using the live
+    // balance would allow a third party to inflate the effective "full" amount and block
+    // partial claims that fall below the minimum.
+    validate_sufficient_balance(claim_amount, recorded_amount, ErrorCode::InvalidAmount)?;
+
+    // Ensure claim amount is either the entire recorded amount or >= minimum unmint amount
     validate_amount_full_or_above_minimum(
         claim_amount,
-        escrow_balance_before,
+        recorded_amount,
         state.minimum_unmint_amount,
         ErrorCode::AmountBelowMinimum,
     )?;
-
-    require!(
-        claim_amount <= user_unmint_details.requested_amount,
-        ErrorCode::ClaimAmountExceedsRequest
-    );
 
     // Check if the withdrawal delay has passed
     validate_timestamp_has_passed(
@@ -220,17 +224,33 @@ pub fn claim_unmint_handler(ctx: Context<ClaimUnmint>, claim_amount: u64) -> Res
 
     // Reload escrow account to get updated balance after burn
     ctx.accounts.escrow_token_account.reload()?;
-
-    // Ensure escrow balance is either zero or >= minimum
     let escrow_balance_after = ctx.accounts.escrow_token_account.amount;
-    validate_balance_zero_or_above_minimum(
-        escrow_balance_after,
-        state.minimum_unmint_amount,
-        ErrorCode::BalanceBelowMinimum,
-    )?;
 
-    // Close the accounts if the escrow is empty
-    if escrow_balance_after == 0 {
+    if user_unmint_details.requested_amount == 0 {
+        // Full claim completed. The escrow ATA may still hold tokens deposited externally.
+        // Return any remaining balance to the user before closing so the accounts are
+        // always cleaned up on a full claim.
+        if escrow_balance_after > 0 {
+            token::transfer_checked(
+                CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    TransferChecked {
+                        from: ctx.accounts.escrow_token_account.to_account_info(),
+                        mint: ctx.accounts.abrafi_backed_token_mint.to_account_info(),
+                        to: ctx.accounts.user_abrafi_backed_token_account.to_account_info(),
+                        authority: user_unmint_details.to_account_info(),
+                    },
+                    &[&[
+                        UNMINT_DETAILS_SEED,
+                        user.key().as_ref(),
+                        ctx.accounts.claim_token_mint.key().as_ref(),
+                        &[user_unmint_details.bump],
+                    ]],
+                ),
+                escrow_balance_after,
+                ctx.accounts.abrafi_backed_token_mint.decimals,
+            )?;
+        }
         close_escrow_token_account(
             ctx.accounts.token_program.to_account_info(),
             &ctx.accounts.escrow_token_account,
@@ -240,8 +260,16 @@ pub fn claim_unmint_handler(ctx: Context<ClaimUnmint>, claim_amount: u64) -> Res
             &ctx.accounts.claim_token_mint.key(),
             user_unmint_details.bump,
         )?;
-
         user_unmint_details.close(user.to_account_info())?;
+    } else {
+        // Partial claim: remaining recorded amount must be zero or above minimum.
+        // Escrow balance is ignored here — external deposits are swept back on full exit
+        // and do not represent the user's legitimate remaining position.
+        validate_balance_zero_or_above_minimum(
+            user_unmint_details.requested_amount,
+            state.minimum_unmint_amount,
+            ErrorCode::BalanceBelowMinimum,
+        )?;
     }
 
     emit!(UnmintClaimed {
