@@ -103,8 +103,15 @@ pub fn request_unstake_handler(ctx: Context<RequestUnstake>, liquid_staking_amou
         ErrorCode::InvalidAmount,
     )?;
 
-    // Check if amount meets minimum unstake requirement
-    validate_amount_meets_minimum(liquid_staking_amount, state.minimum_unstake_amount, ErrorCode::AmountBelowMinimumUnstake)?;
+    // Check if amount meets minimum unstake requirement.
+    // A full-position exit is always permitted even if the balance has fallen below the
+    // minimum, so users are never permanently unable to exit their position.
+    validate_amount_full_or_above_minimum(
+        liquid_staking_amount,
+        ctx.accounts.user_liquid_staking_token_account.amount,
+        state.minimum_unstake_amount,
+        ErrorCode::AmountBelowMinimumUnstake,
+    )?;
 
     let underlying_amount = convert_to_assets(
         liquid_staking_amount,
