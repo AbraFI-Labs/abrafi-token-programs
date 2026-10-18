@@ -33,6 +33,7 @@ usdaf-compat = []
 # correct program ID for each deployment in the public repository build.
 usdaf = []
 solaf = []
+btcaf = []
 
 [dependencies]
 anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
@@ -41,5 +42,5 @@ shared = { path = "../../shared" }
 solana-security-txt = "1.1.3"
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))', 'cfg(feature, values("test", "usdaf-compat", "usdaf", "solaf"))'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))', 'cfg(feature, values("test", "usdaf-compat", "usdaf", "solaf", "btcaf"))'] }
 deprecated = "allow"

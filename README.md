@@ -24,7 +24,7 @@ Each program supports multiple token deployments selected via a Cargo feature fl
 cargo build-sbf -- -p abrafi-backed-token    --features usdaf,usdaf-compat
 cargo build-sbf -- -p abrafi-staking-liquid  --features usdaf,susdaf-compat
 cargo build-sbf -- -p abrafi-staking-rewards --features solaf
-cargo build-sbf -- -p abrafi-yield-router    --features usdaf
+cargo build-sbf -- -p abrafi-yield-router    --features solaf
 ```
 
 ## Verified Builds
@@ -32,20 +32,30 @@ cargo build-sbf -- -p abrafi-yield-router    --features usdaf
 All programs deployed on mainnet are built using [solana-verify](https://github.com/Ellipsis-Labs/solana-verify) for reproducible, verifiable builds. You can verify any deployed program matches this source code:
 
 ```bash
-# Install solana-verify
-cargo install solana-verify
+# Install solana-verify — needs Rust >=1.89 to compile. If this repo's
+# rust-toolchain.toml pins an older version, that override applies to this
+# install too (even though it's unrelated to building the Solana programs
+# themselves) — use +stable or a specific newer toolchain to bypass it:
+rustup update stable
+cargo +stable install solana-verify --locked
 
-# Build reproducibly
-solana-verify build --library-name <program_name> -- --features <token>
+# Build reproducibly — base-image is pinned; the tool's own default image
+# selection (inferred from Cargo.lock) has been confirmed too old to build
+# this codebase (missing edition2024 support), so always pass this explicitly:
+solana-verify build --library-name <program_name> \
+  --base-image solanafoundation/solana-verifiable-build:3.1.12 \
+  -- --features <token>
 
-# Verify against a deployed program
+# Verify against a deployed program — same --base-image pin applies here too
 solana-verify verify-from-repo \
   -u https://api.mainnet-beta.solana.com \
   --program-id <PROGRAM_ID> \
   https://github.com/AbraFI-Labs/abrafi-token-programs \
   --commit-hash <COMMIT_HASH> \
   --library-name <program_name> \
-  --mount-path programs/<program_name>
+  --mount-path solana \
+  --base-image solanafoundation/solana-verifiable-build:3.1.12 \
+  -- --features <token>
 ```
 
 Program IDs and verified commit hashes for each release are published on the [Releases](https://github.com/AbraFI-Labs/abrafi-token-programs/releases) page.
